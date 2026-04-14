@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PATHOGEN — Measles Transmission Model</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne+Mono&family=Syne:wght@400;600;800&display=swap');
+
+:root {
+  --bg:        #060810;
+  --surface:   #0c0f1a;
+  --surface2:  #111827;
+  --border:    rgba(255,255,255,0.06);
+  --border2:   rgba(255,255,255,0.12);
+  --immune:    #00d084;
+  --suscept:   #3b82f6;
+  --infected:  #ff4444;
+  --recovered: #a855f7;
+  --text:   #e2e8f0;
+  --muted:  #64748b;
+  --bright: #f8fafc;
+  --mono: 'Syne Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  display: grid;
+  grid-template-rows: 52px 1fr;
+  grid-template-columns: 280px 1fr 220px;
+  grid-template-areas: "header header header" "left center right";
+  height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+header {
+  grid-area: header;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; background: var(--surface);
+  position: relative; overflow: hidden;
+}
+header::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--infected), transparent);
+  animation: scanH 4s linear infinite;
+}
+@keyframes scanH { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+.logo { font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.25em; color: var(--infected); display: flex; align-items: center; gap: 10px; }
+.logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--infected); animation: pulse-dot 1.4s ease-in-out infinite; }
+@keyframes pulse-dot { 0%,100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.6); } 50% { box-shadow: 0 0 0 6px rgba(255,68,68,0); } }
+.header-center { position: absolute; left: 50%; transform: translateX(-50%); text-align: center; }
+.header-title { font-size: 0.65rem; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; }
+.header-right { display: flex; gap: 20px; align-items: center; }
+.hstat { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); display: flex; flex-direction: column; align-items: flex-end; }
+.hstat strong { color: var(--bright); font-size: 0.95rem; line-height: 1; }
+
+.left {
+  grid-area: left; border-right: 1px solid var(--border);
+  padding: 20px 18px; display: flex; flex-direction: column; gap: 22px;
+  overflow-y: auto; background: var(--surface);
+}
+.section-label {
+  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.18em; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px;
+}
+.ctrl { margin-bottom: 14px; }
+.ctrl-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.ctrl-name { font-size: 0.72rem; color: var(--text); letter-spacing: 0.03em; }
+.ctrl-val { font-family: var(--mono); font-size: 0.78rem; color: var(--bright); }
+.ctrl-hint { font-size: 0.6rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+input[type=range] {
+  -webkit-appearance: none; width: 100%; height: 3px; border-radius: 2px;
+  background: var(--surface2); outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--bright); border: 2px solid var(--bg);
+  box-shadow: 0 0 8px rgba(255,255,255,0.3); transition: transform 0.15s;
+}
+input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); }
+input[type=range].c-immune::-webkit-slider-thumb  { background: var(--immune); }
+input[type=range].c-suscept::-webkit-slider-thumb { background: var(--suscept); }
+input[type=range].c-infect::-webkit-slider-thumb  { background: var(--infected); }
+input[type=range].c-fail::-webkit-slider-thumb    { background: #f59e0b; }
+
+.btn-row { display: flex; gap: 8px; }
+.btn {
+  flex: 1; font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 10px 8px; border-radius: 4px;
+  border: 1px solid var(--border2); background: transparent; color: var(--text);
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-run { border-color: var(--infected); color: var(--infected); background: rgba(255,68,68,0.06); }
+.btn-run.active { background: var(--infected); color: #fff; box-shadow: 0 0 20px rgba(255,68,68,0.4); }
+.btn-run:hover { box-shadow: 0 0 16px rgba(255,68,68,0.3); }
+.btn-init { border-color: var(--border2); color: var(--muted); }
+.btn-init:hover { border-color: var(--text); color: var(--text); }
+.btn-step { border-color: var(--suscept); color: var(--suscept); background: rgba(59,130,246,0.06); }
+.btn-step:hover { box-shadow: 0 0 12px rgba(59,130,246,0.3); }
+
+.legend { display: flex; flex-direction: column; gap: 5px; }
+.legend-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 4px; border: 1px solid transparent; transition: all 0.2s; }
+.legend-item:hover { background: rgba(255,255,255,0.03); border-color: var(--border); }
+.pip { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.pip.immune    { background: var(--immune);    box-shadow: 0 0 6px var(--immune); }
+.pip.suscept   { background: var(--suscept);   box-shadow: 0 0 6px var(--suscept); }
+.pip.infected  { background: var(--infected);  box-shadow: 0 0 6px var(--infected); animation: pip-pulse 1.2s ease-in-out infinite; }
+.pip.recovered { background: var(--recovered); box-shadow: 0 0 6px var(--recovered); }
+@keyframes pip-pulse { 0%,100% { box-shadow: 0 0 4px var(--infected); } 50% { box-shadow: 0 0 14px var(--infected), 0 0 24px rgba(255,68,68,0.3); } }
+.legend-text { font-size: 0.72rem; color: var(--text); }
+.legend-sub  { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); }
+
+.center { grid-area: center; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+#grid-canvas { flex: 1; display: block; width: 100%; cursor: crosshair; }
+.chart-area { height: 110px; border-top: 1px solid var(--border); background: var(--surface); position: relative; }
+#chart-canvas { display: block; width: 100%; height: 100%; }
+.step-ticker {
+  position: absolute; top: 10px; left: 14px;
+  font-family: var(--mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 0.12em;
+  pointer-events: none; z-index: 10;
+}
+.step-ticker span { color: var(--bright); font-size: 1rem; }
+.outbreak-banner {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.25em; color: var(--infected);
+  text-transform: uppercase; background: rgba(255,68,68,0.08);
+  border: 1px solid rgba(255,68,68,0.3); padding: 8px 18px; border-radius: 3px;
+  pointer-events: none; opacity: 0; transition: opacity 0.5s; z-index: 20;
+}
+.outbreak-banner.visible { opacity: 1; }
+
+.right {
+  grid-area: right; border-left: 1px solid var(--border); background: var(--surface);
+  padding: 20px 16px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto;
+}
+.stat-cards { display: flex; flex-direction: column; gap: 6px; }
+.stat-card {
+  padding: 10px 12px; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--surface2); transition: border-color 0.3s;
+}
+.stat-card:hover { border-color: var(--border2); }
+.stat-card-label { font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.stat-card-val { font-family: var(--mono); font-size: 1.3rem; line-height: 1; }
+.stat-card-sub { font-size: 0.62rem; color: var(--muted); margin-top: 2px; }
+.stat-card.immune    { border-left: 2px solid var(--immune);    } .stat-card.immune    .stat-card-val { color: var(--immune); }
+.stat-card.suscept   { border-left: 2px solid var(--suscept);   } .stat-card.suscept   .stat-card-val { color: var(--suscept); }
+.stat-card.infected  { border-left: 2px solid var(--infected);  } .stat-card.infected  .stat-card-val { color: var(--infected); }
+.stat-card.recovered { border-left: 2px solid var(--recovered); } .stat-card.recovered .stat-card-val { color: var(--recovered); }
+
+.indicators { display: flex; flex-direction: column; gap: 8px; }
+.indicator { display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; }
+.indicator-label { color: var(--muted); }
+.indicator-val { font-family: var(--mono); color: var(--bright); }
+.indicator-val.danger { color: var(--infected); }
+.indicator-val.safe   { color: var(--immune); }
+
+.prog-bar-wrap { margin-top: 2px; }
+.prog-label { display: flex; justify-content: space-between; font-size: 0.6rem; color: var(--muted); margin-bottom: 3px; }
+.prog-track { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.prog-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease, background 0.4s; }
+
+.log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.log::-webkit-scrollbar { width: 3px; }
+.log::-webkit-scrollbar-track { background: transparent; }
+.log::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.log-entry {
+  font-family: var(--mono); font-size: 0.59rem; color: var(--muted);
+  padding: 3px 6px; border-left: 1px solid var(--border);
+  animation: fadeIn 0.3s ease;
+}
+.log-entry .step { color: var(--text); }
+.log-entry.event { border-left-color: var(--infected); color: var(--text); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>PATHOGEN</div>
+  <div class="header-center"><div class="header-title">Measles · Hexagonal Transmission Model · v2.0</div></div>
+  <div class="header-right">
+    <div class="hstat"><span>STEP</span><strong id="hdr-step-val">0</strong></div>
+    <div class="hstat" style="align-items:flex-end"><span>R₀ proxy</span><strong id="hdr-r0" style="color:var(--infected)">—</strong></div>
+  </div>
+</header>
+
+<aside class="left">
+  <div>
+    <div class="section-label">Population</div>
+    <div class="ctrl">
+      <div class="ctrl-header"><span class="ctrl-name">Total cells (X)</span><span class="ctrl-val" id="lv-x">600</span></div>
+      <input type="range" id="sl-x" min="100" max="2000" step="50" value="600">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-header"><span class="ctrl-name">Vaccinated — Y%</span><span class="ctrl-val" id="lv-y" style="color:var(--immune)">60%</span></div>
+      <input class="c-immune" type="range" id="sl-y" min="0" max="100" value="60">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-header"><span class="ctrl-name">Vaccine failure rate — A%</span><span class="ctrl-val" id="lv-a" style="color:#f59e0b">20%</span></div>
+      <input class="c-fail" type="range" id="sl-a" min="0" max="100" value="20">
+      <div class="ctrl-hint">% of vaccinated group for whom the vaccine did not provide immunity (become susceptible)</div>
+    </div>
+  </div>
+  <div>
+    <div class="section-label">Disease Parameters</div>
+    <div class="ctrl">
+      <div class="ctrl-header"><span class="ctrl-name">Infection probability</span><span class="ctrl-val" id="lv-inf" style="color:var(--infected)">90%</span></div>
+      <input class="c-infect" type="range" id="sl-inf" min="5" max="100" value="90">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-header"><span class="ctrl-name">Infectious period (steps)</span><span class="ctrl-val" id="lv-rec">6</span></div>
+      <input type="range" id="sl-rec" min="1" max="30" value="6">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-header"><span class="ctrl-name">Simulation speed</span><span class="ctrl-val" id="lv-spd">5/s</span></div>
+      <input type="range" id="sl-spd" min="1" max="30" value="5">
+    </div>
+  </div>
+  <div>
+    <div class="section-label">State Key</div>
+    <div class="legend">
+      <div class="legend-item"><div class="pip immune"></div><div><div class="legend-text">Vaccinated</div><div class="legend-sub">State 1 · immune</div></div></div>
+      <div class="legend-item"><div class="pip suscept"></div><div><div class="legend-text">Susceptible</div><div class="legend-sub">State 0 · can be infected</div></div></div>
+      <div class="legend-item"><div class="pip infected"></div><div><div class="legend-text">Infected</div><div class="legend-sub">State 2 · contagious</div></div></div>
+      <div class="legend-item"><div class="pip recovered"></div><div><div class="legend-text">Recovered</div><div class="legend-sub">State 3 · post-immune</div></div></div>
+    </div>
+  </div>
+  <div class="btn-row" style="margin-top:auto">
+    <button class="btn btn-init" id="btn-init">Init</button>
+    <button class="btn btn-run" id="btn-run">▶ Run</button>
+    <button class="btn btn-step" id="btn-step">Step</button>
+  </div>
+</aside>
+
+<main class="center">
+  <div class="step-ticker">STEP <span id="step-lbl">0</span></div>
+  <div class="outbreak-banner" id="outbreak-banner">⚠ OUTBREAK CONTAINED</div>
+  <canvas id="grid-canvas"></canvas>
+  <div class="chart-area"><canvas id="chart-canvas"></canvas></div>
+</main>
+
+<aside class="right">
+  <div class="section-label">Live Counts</div>
+  <div class="stat-cards">
+    <div class="stat-card immune">
+      <div class="stat-card-label">Vaccinated</div>
+      <div class="stat-card-val" id="sc-immune">—</div>
+      <div class="stat-card-sub" id="sc-immune-p">— %</div>
+    </div>
+    <div class="stat-card suscept">
+      <div class="stat-card-label">Susceptible</div>
+      <div class="stat-card-val" id="sc-suscept">—</div>
+      <div class="stat-card-sub" id="sc-suscept-p">— %</div>
+    </div>
+    <div class="stat-card infected">
+      <div class="stat-card-label">Infected</div>
+      <div class="stat-card-val" id="sc-infected">—</div>
+      <div class="stat-card-sub" id="sc-infected-p">— %</div>
+    </div>
+    <div class="stat-card recovered">
+      <div class="stat-card-label">Recovered</div>
+      <div class="stat-card-val" id="sc-recovered">—</div>
+      <div class="stat-card-sub" id="sc-recovered-p">— %</div>
+    </div>
+  </div>
+  <div>
+    <div class="section-label">Epidemic Metrics</div>
+    <div class="indicators">
+      <div class="indicator"><span class="indicator-label">Peak infected</span><span class="indicator-val" id="pk-infected">—</span></div>
+      <div class="indicator"><span class="indicator-label">Attack rate</span><span class="indicator-val" id="pk-attack">—</span></div>
+      <div class="indicator"><span class="indicator-label">Protection coverage</span><span class="indicator-val" id="pk-herd">—</span></div>
+      <div class="indicator"><span class="indicator-label">Generation</span><span class="indicator-val" id="pk-gen">0</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="section-label">Outbreak Progress</div>
+    <div class="prog-bar-wrap">
+      <div class="prog-label"><span>Affected</span><span id="prog-pct">0%</span></div>
+      <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%;background:var(--infected)"></div></div>
+    </div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="section-label">Event Log</div>
+    <div class="log" id="event-log"></div>
+  </div>
+</aside>
+
+<script>
+const SUSCEPT=0, IMMUNE=1, INFECTED=2, RECOVERED=3;
+
+const PALETTE = {
+  [IMMUNE]:    { fill:'rgba(0,208,132,0.13)',  stroke:'#00d084' },
+  [SUSCEPT]:   { fill:'rgba(59,130,246,0.11)', stroke:'#3b82f6' },
+  [INFECTED]:  { fill:'rgba(255,68,68,0.22)',  stroke:'#ff4444' },
+  [RECOVERED]: { fill:'rgba(168,85,247,0.13)', stroke:'#a855f7' },
+};
+
+const $ = id => document.getElementById(id);
+
+$('sl-x').addEventListener('input', ()=>$('lv-x').textContent=$('sl-x').value);
+$('lv-x').textContent=$('sl-x').value;
+$('sl-y').addEventListener('input', ()=>$('lv-y').textContent=$('sl-y').value+'%');
+$('sl-a').addEventListener('input', ()=>$('lv-a').textContent=$('sl-a').value+'%');
+$('sl-inf').addEventListener('input',()=>$('lv-inf').textContent=$('sl-inf').value+'%');
+$('sl-rec').addEventListener('input',()=>$('lv-rec').textContent=$('sl-rec').value);
+$('sl-spd').addEventListener('input',()=>$('lv-spd').textContent=$('sl-spd').value+'/s');
+
+const canvas = $('grid-canvas');
+const ctx    = canvas.getContext('2d');
+const cChart = $('chart-canvas');
+const cctx   = cChart.getContext('2d');
+
+let cells=[], cellPos=[], neighbors=[], step=0, running=false, animId=null;
+let history=[], peakInfected=0, totalEverInfected=0, animTick=0;
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=0|Math.random()*(i+1);
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+// Draw a pointy-top hexagon centered at (cx,cy) with circumradius r
+function hexPath(cx, cy, r) {
+  ctx.beginPath();
+  for(let k=0;k<6;k++){
+    const angle = Math.PI/6 + k*Math.PI/3;
+    const px = cx + r * Math.cos(angle);
+    const py = cy + r * Math.sin(angle);
+    k===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+}
+
+function buildGrid(){
+  const W=canvas.offsetWidth||700, H=canvas.offsetHeight||460;
+  canvas.width=W; canvas.height=H;
+  const total=+$('sl-x').value;
+
+  const aspect = W / H;
+  const colRowRatio = aspect * Math.sqrt(3) / 1.5;
+  let cols = Math.round(Math.sqrt(total * colRowRatio));
+  let rows = Math.round(cols / colRowRatio);
+  cols = Math.max(2, cols);
+  rows = Math.max(2, rows);
+
+  const rFromW = W / (cols * Math.sqrt(3) + Math.sqrt(3)/2);
+  const rFromH = H / (rows * 1.5 + 0.5);
+  const r = Math.min(rFromW, rFromH) * 0.97;
+
+  const colW = r * Math.sqrt(3);
+  const rowH = r * 1.5;
+
+  const gridW = cols * colW + colW * 0.5;
+  const gridH = rows * rowH + r * 0.5;
+  const offX  = (W - gridW) / 2 + colW * 0.5;
+  const offY  = (H - gridH) / 2 + r;
+
+  cells=[]; cellPos=[]; neighbors=[];
+
+  for(let row=0; row<rows; row++){
+    for(let col=0; col<cols; col++){
+      const cx = offX + col * colW + (row % 2 === 1 ? colW * 0.5 : 0);
+      const cy = offY + row * rowH;
+      cells.push({state:IMMUNE, infectedFor:0, col, row});
+      cellPos.push({x:cx, y:cy, r});
+    }
+  }
+
+  for(let i=0; i<cells.length; i++){
+    const {col, row} = cells[i];
+    const nb = [];
+    const dirs = row%2===0
+      ? [[-1,-1],[0,-1],[1,0],[0,1],[-1,1],[-1,0]]
+      : [[ 0,-1],[1,-1],[1,0],[1,1],[ 0,1],[-1,0]];
+    for(const [dc,dr] of dirs){
+      const nc=col+dc, nr=row+dr;
+      if(nc>=0 && nc<cols && nr>=0 && nr<rows) nb.push(nr*cols+nc);
+    }
+    neighbors.push(nb);
+  }
+
+  const n = cells.length;
+  // Y% of population are vaccinated
+  const vaccCount = Math.round(n * $('sl-y').value / 100);
+  // A% of vaccinated group had vaccine failure → become susceptible
+  const failCount = Math.round(vaccCount * $('sl-a').value / 100);
+
+  // All cells start immune
+  for(let i=0;i<n;i++) cells[i].state = IMMUNE;
+
+  // Randomly assign vaccine failures among the vaccinated pool
+  const idxArr = shuffle([...Array(n).keys()]);
+  // First vaccCount indices are the "vaccinated" group
+  // Of those, the first failCount are failures → susceptible
+  for(let i=0; i<failCount; i++) cells[idxArr[i]].state = SUSCEPT;
+
+  // Seed one infected from the susceptible pool
+  const susPool = idxArr.slice(0, failCount);
+  const unvaccPool = idxArr.slice(vaccCount); // unvaccinated, not modelled as susceptible here
+  // Seed from failures if any, else seed from unvaccinated remainder
+  const seedPool = susPool.length > 0 ? susPool : (unvaccPool.length > 0 ? unvaccPool : idxArr);
+  const seed = seedPool[0|Math.random()*seedPool.length];
+  cells[seed].state = INFECTED;
+
+  step=0; history=[]; peakInfected=1; totalEverInfected=1; animTick=0;
+  $('step-lbl').textContent='0';
+  $('hdr-step-val').textContent='0';
+  $('outbreak-banner').classList.remove('visible');
+  $('event-log').innerHTML='';
+  const effectiveVacc = ((vaccCount - failCount) / n * 100).toFixed(1);
+  addLog(`Grid initialised — ${failCount} vaccine failures · ${effectiveVacc}% effectively immune · 1 case seeded.`, true);
+  snap(); updateStats(); render(); drawChart();
+}
+
+function simStep(){
+  const infP = +$('sl-inf').value / 100;
+  const recT = +$('sl-rec').value;
+  const next = cells.map(c=>({...c}));
+  let newI=0, newR=0;
+  for(let i=0;i<cells.length;i++){
+    const c = cells[i];
+    if(c.state===SUSCEPT){
+      if(neighbors[i].some(ni=>cells[ni].state===INFECTED) && Math.random()<infP){
+        next[i].state=INFECTED; next[i].infectedFor=0; newI++; totalEverInfected++;
+      }
+    } else if(c.state===INFECTED){
+      next[i].infectedFor++;
+      if(next[i].infectedFor>=recT){ next[i].state=RECOVERED; newR++; }
+    }
+  }
+  cells=next; step++; animTick++;
+  const curI = cells.filter(c=>c.state===INFECTED).length;
+  if(curI>peakInfected) peakInfected=curI;
+  $('step-lbl').textContent=step;
+  $('hdr-step-val').textContent=step;
+  if(newI>0||newR>0) addLog(`+${newI} infected · ${newR} recovered`);
+  snap(); updateStats(); render(); drawChart();
+  if(!cells.some(c=>c.state===INFECTED)){
+    stopSim();
+    $('outbreak-banner').classList.add('visible');
+    setTimeout(()=>$('outbreak-banner').classList.remove('visible'), 4500);
+    addLog('⚠ Outbreak contained — no active cases.', true);
+  }
+}
+
+function snap(){
+  let im=0,su=0,inf=0,rec=0;
+  for(const c of cells){
+    if(c.state===IMMUNE) im++;
+    else if(c.state===SUSCEPT) su++;
+    else if(c.state===INFECTED) inf++;
+    else rec++;
+  }
+  history.push({immune:im, suscept:su, infected:inf, recovered:rec});
+}
+
+function updateStats(){
+  const last=history[history.length-1];
+  const t=cells.length;
+  const pct=n=>(n/t*100).toFixed(1);
+  $('sc-immune').textContent=last.immune;   $('sc-immune-p').textContent=pct(last.immune)+'%';
+  $('sc-suscept').textContent=last.suscept; $('sc-suscept-p').textContent=pct(last.suscept)+'%';
+  $('sc-infected').textContent=last.infected; $('sc-infected-p').textContent=pct(last.infected)+'%';
+  $('sc-recovered').textContent=last.recovered; $('sc-recovered-p').textContent=pct(last.recovered)+'%';
+  const prev=history.length>=2?history[history.length-2].infected:1;
+  const r0=prev>0?(last.infected/prev).toFixed(2):'—';
+  $('hdr-r0').textContent=r0;
+  $('hdr-r0').style.color=parseFloat(r0)>1?'var(--infected)':'var(--immune)';
+  $('pk-infected').textContent=peakInfected+' ('+pct(peakInfected)+'%)';
+  $('pk-attack').textContent=pct(totalEverInfected-1)+'%';
+  $('pk-herd').textContent=pct(last.immune+last.recovered)+'%';
+  $('pk-gen').textContent=$('sl-rec').value>0?Math.floor(step/+$('sl-rec').value):0;
+  const aff=(last.infected+last.recovered)/t;
+  $('prog-fill').style.width=(aff*100).toFixed(1)+'%';
+  $('prog-pct').textContent=(aff*100).toFixed(1)+'%';
+  $('prog-fill').style.background=aff>0.4?'var(--infected)':aff>0.15?'#f59e0b':'var(--suscept)';
+}
+
+function render(){
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#060810';
+  ctx.fillRect(0,0,W,H);
+  const pulse=Math.sin(animTick*0.18)*0.5+0.5;
+
+  for(let i=0;i<cells.length;i++){
+    const {x,y,r} = cellPos[i];
+    const s = cells[i].state;
+    const pal = PALETTE[s];
+
+    if(s===INFECTED){
+      const gr=ctx.createRadialGradient(x,y,0,x,y,r*2.4);
+      gr.addColorStop(0,`rgba(255,68,68,${0.22+pulse*0.18})`);
+      gr.addColorStop(1,'rgba(255,68,68,0)');
+      ctx.fillStyle=gr;
+      ctx.beginPath();
+      ctx.arc(x,y,r*2.4,0,Math.PI*2);
+      ctx.fill();
+    }
+
+    hexPath(x,y,r);
+    ctx.fillStyle=pal.fill;
+    ctx.fill();
+
+    hexPath(x,y,r);
+    ctx.strokeStyle=pal.stroke;
+    ctx.lineWidth=s===INFECTED ? 1.2+pulse*0.5 : 0.5;
+    ctx.globalAlpha=s===INFECTED ? 0.8+pulse*0.2 : 0.75;
+    ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+}
+
+function drawChart(){
+  const W=cChart.offsetWidth||700, H=cChart.offsetHeight||110;
+  cChart.width=W; cChart.height=H;
+  cctx.clearRect(0,0,W,H);
+  if(history.length<2) return;
+  const n=history.length, tot=cells.length;
+  const pad={t:10,b:20,l:8,r:8};
+  const cW=W-pad.l-pad.r, cH=H-pad.t-pad.b;
+
+  cctx.strokeStyle='rgba(255,255,255,0.04)'; cctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=pad.t+cH*(i/4);
+    cctx.beginPath(); cctx.moveTo(pad.l,y); cctx.lineTo(W-pad.r,y); cctx.stroke();
+  }
+
+  const series=[
+    {key:'immune',   color:'#00d084',lw:1,  alpha:0.65},
+    {key:'recovered',color:'#a855f7',lw:1,  alpha:0.65},
+    {key:'suscept',  color:'#3b82f6',lw:1,  alpha:0.65},
+    {key:'infected', color:'#ff4444',lw:2.5,alpha:1   },
+  ];
+  for(const s of series){
+    cctx.beginPath();
+    for(let i=0;i<n;i++){
+      const x=pad.l+(i/(n-1))*cW;
+      const y=pad.t+cH-(history[i][s.key]/tot)*cH;
+      i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+    }
+    cctx.strokeStyle=s.color; cctx.lineWidth=s.lw; cctx.globalAlpha=s.alpha;
+    cctx.stroke(); cctx.globalAlpha=1;
+  }
+
+  cctx.fillStyle='rgba(100,116,139,0.7)';
+  cctx.font='9px "Syne Mono",monospace';
+  cctx.textAlign='left'; cctx.fillText('0',pad.l,H-4);
+  cctx.textAlign='center'; cctx.fillText('EPIDEMIC CURVE',W/2,H-4);
+  cctx.textAlign='right'; cctx.fillText('step '+step,W-pad.r,H-4);
+}
+
+function addLog(msg,isEvent=false){
+  const log=$('event-log');
+  const el=document.createElement('div');
+  el.className='log-entry'+(isEvent?' event':'');
+  el.innerHTML=`<span class="step">${String(step).padStart(4,'0')}</span> ${msg}`;
+  log.prepend(el);
+  if(log.children.length>80) log.lastChild.remove();
+}
+
+let lastTs=0, accumMs=0;
+function loop(ts){
+  const dt=ts-lastTs; lastTs=ts; accumMs+=dt;
+  const msPer=1000/+$('sl-spd').value;
+  if(accumMs>=msPer){ simStep(); accumMs=0; }
+  if(running) animId=requestAnimationFrame(loop);
+}
+function startSim(){
+  if(!cells.length) buildGrid();
+  running=true; lastTs=performance.now(); accumMs=0;
+  $('btn-run').textContent='⏸ Pause'; $('btn-run').classList.add('active');
+  animId=requestAnimationFrame(loop);
+}
+function stopSim(){
+  running=false; cancelAnimationFrame(animId);
+  $('btn-run').textContent='▶ Run'; $('btn-run').classList.remove('active');
+}
+
+$('btn-init').addEventListener('click',()=>{ stopSim(); buildGrid(); });
+$('btn-run').addEventListener('click',()=>{ if(!cells.length) buildGrid(); running?stopSim():startSim(); });
+$('btn-step').addEventListener('click',()=>{ if(!cells.length) buildGrid(); stopSim(); simStep(); });
+
+let resT;
+window.addEventListener('resize',()=>{ clearTimeout(resT); resT=setTimeout(()=>{ if(cells.length) buildGrid(); drawChart(); },200); });
+
+buildGrid();
+</script>
+</body>
+</html>
