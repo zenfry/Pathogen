@@ -345,54 +345,6 @@ function hexPath(cx, cy, r) {
   ctx.closePath();
 }
 
-function buildGrid(){
-  const W=canvas.offsetWidth||700, H=canvas.offsetHeight||460;
-  canvas.width=W; canvas.height=H;
-  const total=+$('sl-x').value;
-
-  const aspect = W / H;
-  const colRowRatio = aspect * Math.sqrt(3) / 1.5;
-  let cols = Math.round(Math.sqrt(total * colRowRatio));
-  let rows = Math.round(cols / colRowRatio);
-  cols = Math.max(2, cols);
-  rows = Math.max(2, rows);
-
-  const rFromW = W / (cols * Math.sqrt(3) + Math.sqrt(3)/2);
-  const rFromH = H / (rows * 1.5 + 0.5);
-  const r = Math.min(rFromW, rFromH) * 0.97;
-
-  const colW = r * Math.sqrt(3);
-  const rowH = r * 1.5;
-
-  const gridW = cols * colW + colW * 0.5;
-  const gridH = rows * rowH + r * 0.5;
-  const offX  = (W - gridW) / 2 + colW * 0.5;
-  const offY  = (H - gridH) / 2 + r;
-
-  cells=[]; cellPos=[]; neighbors=[];
-
-  for(let row=0; row<rows; row++){
-    for(let col=0; col<cols; col++){
-      const cx = offX + col * colW + (row % 2 === 1 ? colW * 0.5 : 0);
-      const cy = offY + row * rowH;
-      cells.push({state:IMMUNE, infectedFor:0, col, row});
-      cellPos.push({x:cx, y:cy, r});
-    }
-  }
-
-  for(let i=0; i<cells.length; i++){
-    const {col, row} = cells[i];
-    const nb = [];
-    const dirs = row%2===0
-      ? [[-1,-1],[0,-1],[1,0],[0,1],[-1,1],[-1,0]]
-      : [[ 0,-1],[1,-1],[1,0],[1,1],[ 0,1],[-1,0]];
-    for(const [dc,dr] of dirs){
-      const nc=col+dc, nr=row+dr;
-      if(nc>=0 && nc<cols && nr>=0 && nr<rows) nb.push(nr*cols+nc);
-    }
-    neighbors.push(nb);
-  }
-
 const n = cells.length;
 
 // Y% of population are vaccinated
@@ -450,8 +402,7 @@ snap();
 updateStats();
 render();
 drawChart();
-
-}
+  }
 
 function simStep(){
   const infP = +$('sl-inf').value / 100;
