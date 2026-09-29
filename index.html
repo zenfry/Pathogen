@@ -393,37 +393,64 @@ function buildGrid(){
     neighbors.push(nb);
   }
 
-  const n = cells.length;
-  // Y% of population are vaccinated
-  const vaccCount = Math.round(1-(n * $('sl-y').value / 100));
-  // A% of vaccinated group had vaccine failure → become susceptible
-  const failCount = Math.round(vaccCount * $('sl-a').value / 100);
+const n = cells.length;
 
-  // All cells start immune
-  for(let i=0;i<n;i++) cells[i].state = IMMUNE;
+// Y% of population are vaccinated
+const vaccCount = Math.round(n * $('sl-y').value / 100);
 
-  // Randomly assign vaccine failures among the vaccinated pool
-  const idxArr = shuffle([...Array(n).keys()]);
-  // First vaccCount indices are the "vaccinated" group
-  // Of those, the first failCount are failures → susceptible
-  for(let i=0; i<failCount; i++) cells[idxArr[i]].state = SUSCEPT;
+// A% of vaccinated people experience vaccine failure
+const failCount = Math.round(vaccCount * $('sl-a').value / 100);
 
-  // Seed one infected from the susceptible pool
-  const susPool = idxArr.slice(0, failCount);
-  const unvaccPool = idxArr.slice(vaccCount); // unvaccinated, not modelled as susceptible here
-  // Seed from failures if any, else seed from unvaccinated remainder
-  const seedPool = susPool.length > 0 ? susPool : (unvaccPool.length > 0 ? unvaccPool : idxArr);
-  const seed = seedPool[0|Math.random()*seedPool.length];
+// Successful vaccinations are immune.
+// Unvaccinated people and vaccine failures are susceptible.
+const immuneCount = vaccCount - failCount;
+const susceptibleCount = n - immuneCount;
+
+// Start everyone susceptible, then assign successful vaccinations.
+for(let i = 0; i < n; i++) {
+  cells[i].state = SUSCEPT;
+  cells[i].infectedFor = 0;
+}
+
+const idxArr = shuffle([...Array(n).keys()]);
+
+// First immuneCount people are successfully vaccinated.
+for(let i = 0; i < immuneCount; i++) {
+  cells[idxArr[i]].state = IMMUNE;
+}
+
+// Seed one infected person from the susceptible population.
+const susPool = idxArr.slice(immuneCount);
+
+if(susPool.length > 0) {
+  const seed = susPool[0 | Math.random() * susPool.length];
   cells[seed].state = INFECTED;
+}
 
-  step=0; history=[]; peakInfected=1; totalEverInfected=1; animTick=0;
-  $('step-lbl').textContent='0';
-  $('hdr-step-val').textContent='0';
-  $('outbreak-banner').classList.remove('visible');
-  $('event-log').innerHTML='';
-  const effectiveVacc = ((vaccCount - failCount) / n * 100).toFixed(1);
-  addLog(`Grid initialised — ${failCount} vaccine failures · ${effectiveVacc}% effectively immune · 1 case seeded.`, true);
-  snap(); updateStats(); render(); drawChart();
+// Correct initial statistics.
+step = 0;
+history = [];
+peakInfected = 1;
+totalEverInfected = 1;
+animTick = 0;
+
+$('step-lbl').textContent = '0';
+$('hdr-step-val').textContent = '0';
+$('outbreak-banner').classList.remove('visible');
+$('event-log').innerHTML = '';
+
+const effectiveVacc = (immuneCount / n * 100).toFixed(1);
+
+addLog(
+  `Grid initialised — ${vaccCount} vaccinated · ${failCount} vaccine failures · ${effectiveVacc}% effectively immune · 1 case seeded.`,
+  true
+);
+
+snap();
+updateStats();
+render();
+drawChart();
+
 }
 
 function simStep(){
