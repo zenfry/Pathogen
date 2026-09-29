@@ -395,7 +395,7 @@ function buildGrid(){
 
   const n = cells.length;
   // Y% of population are vaccinated
-  const vaccCount = Math.round(n * $('sl-y').value / 100);
+  const vaccCount = Math.round(1-(n * $('sl-y').value / 100));
   // A% of vaccinated group had vaccine failure → become susceptible
   const failCount = Math.round(vaccCount * $('sl-a').value / 100);
 
